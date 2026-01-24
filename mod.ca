@@ -1,0 +1,241 @@
+// json - JSON parser / builder for Calcium
+// Author: YTNOBODY
+// License: MIT
+
+namespace json;
+
+use core.string;
+use core.types;
+
+// ============================================
+// Constraints
+// ============================================
+
+constraint Whitespace(c) = c == ' ' || c == '\t' || c == '\n' || c == '\r';
+constraint Digit(c) = string.contains('0123456789', c);
+constraint NumberChar(c) = Digit(c) || c == '.' || c == '-' || c == '+' || c == 'e' || c == 'E';
+
+// ============================================
+// Public API
+// ============================================
+
+func parse(s) = _parse_value(_skip_whitespace(s, 0), s) !? {
+    success(result) => success(result.value)
+    failure(e) => failure(e)
+};
+
+func stringify(value) = _stringify_value(value);
+
+// ============================================
+// Parser: Whitespace
+// ============================================
+
+func _skip_whitespace(s, pos) = _skip_ws_bound(s, pos, pos >= len(s));
+func _skip_ws_bound(s, pos, at_end) = match at_end
+    true => pos
+    false => _skip_ws_char(s, pos, Whitespace(string.char_at(s, pos)));
+func _skip_ws_char(s, pos, is_ws) = match is_ws
+    true => _skip_whitespace(s, pos + 1)
+    false => pos;
+
+// ============================================
+// Parser: Value dispatch
+// ============================================
+
+func _parse_value(pos, s) = _parse_value_bound(pos, s, pos >= len(s));
+func _parse_value_bound(pos, s, at_end) = match at_end
+    true => failure("Unexpected end of input")
+    false => _parse_value_at(string.char_at(s, pos), pos, s);
+
+func _parse_value_at(c, pos, s) = match c
+    '"' => _parse_string(pos, s)
+    '[' => _parse_array(pos, s)
+    '{' => _parse_object(pos, s)
+    't' => _parse_true(pos, s)
+    'f' => _parse_false(pos, s)
+    'n' => _parse_null(pos, s)
+    '-' => _parse_number(pos, s)
+    _ => _parse_value_digit(c, pos, s, Digit(c));
+
+func _parse_value_digit(c, pos, s, is_digit) = match is_digit
+    true => _parse_number(pos, s)
+    false => failure(concat("Unexpected character: ", c));
+
+// ============================================
+// Parser: String
+// ============================================
+
+func _parse_string(pos, s) = _parse_string_content(pos + 1, pos + 1, s);
+
+func _parse_string_content(start, pos, s) = _parse_str_bound(start, pos, s, pos >= len(s));
+func _parse_str_bound(start, pos, s, at_end) = match at_end
+    true => failure("Unterminated string")
+    false => _parse_string_char(start, pos, s, string.char_at(s, pos));
+
+func _parse_string_char(start, pos, s, c) = match c
+    '"' => success({value: string.substring(s, start, pos), next: pos + 1})
+    '\\' => _parse_string_content(start, pos + 2, s)
+    _ => _parse_string_content(start, pos + 1, s);
+
+// ============================================
+// Parser: Number
+// ============================================
+
+func _parse_number(pos, s) = _parse_number_end(pos, pos, s);
+
+func _parse_number_end(start, pos, s) = _parse_num_bound(start, pos, s, pos >= len(s));
+func _parse_num_bound(start, pos, s, at_end) = match at_end
+    true => _make_number(string.substring(s, start, pos), pos)
+    false => _parse_num_char(start, pos, s, NumberChar(string.char_at(s, pos)));
+func _parse_num_char(start, pos, s, is_num) = match is_num
+    true => _parse_number_end(start, pos + 1, s)
+    false => _make_number(string.substring(s, start, pos), pos);
+
+func _make_number(str, next) = _make_num_type(str, next, _has_decimal(str));
+func _make_num_type(str, next, is_float) = match is_float
+    true => success({value: _parse_float(str), next: next})
+    false => success({value: _parse_int(str), next: next});
+
+func _has_decimal(str) = string.index_of(str, '.') >= 0 ||
+                         string.index_of(str, 'e') >= 0 ||
+                         string.index_of(str, 'E') >= 0;
+
+func _parse_int(str) = types.to_int(str) !? {
+    success(v) => v
+    failure(_) => 0
+};
+
+func _parse_float(str) = types.to_float(str) !? {
+    success(v) => v
+    failure(_) => 0.0
+};
+
+// ============================================
+// Parser: Literals
+// ============================================
+
+func _parse_true(pos, s) = match string.substring(s, pos, pos + 4)
+    'true' => success({value: true, next: pos + 4})
+    _ => failure("Expected 'true'");
+
+func _parse_false(pos, s) = match string.substring(s, pos, pos + 5)
+    'false' => success({value: false, next: pos + 5})
+    _ => failure("Expected 'false'");
+
+func _parse_null(pos, s) = match string.substring(s, pos, pos + 4)
+    'null' => success({value: types.null, next: pos + 4})
+    _ => failure("Expected 'null'");
+
+// ============================================
+// Parser: Array
+// ============================================
+
+func _parse_array(pos, s) = _parse_array_start(_skip_whitespace(s, pos + 1), s);
+
+func _parse_array_start(pos, s) = _parse_arr_bound(pos, s, pos >= len(s));
+func _parse_arr_bound(pos, s, at_end) = match at_end
+    true => failure("Unterminated array")
+    false => _parse_arr_check(pos, s, string.char_at(s, pos));
+func _parse_arr_check(pos, s, c) = match c
+    ']' => success({value: [], next: pos + 1})
+    _ => _parse_array_elements(pos, s, []);
+
+func _parse_array_elements(pos, s, acc) = _parse_value(pos, s) !? {
+    success(result) => _parse_array_after_element(_skip_whitespace(s, result.next), s, push(acc, result.value))
+    failure(e) => failure(e)
+};
+
+func _parse_array_after_element(pos, s, acc) = _parse_arr_after_bound(pos, s, acc, pos >= len(s));
+func _parse_arr_after_bound(pos, s, acc, at_end) = match at_end
+    true => failure("Unterminated array")
+    false => _parse_arr_after_char(pos, s, acc, string.char_at(s, pos));
+func _parse_arr_after_char(pos, s, acc, c) = match c
+    ']' => success({value: acc, next: pos + 1})
+    ',' => _parse_array_elements(_skip_whitespace(s, pos + 1), s, acc)
+    _ => failure("Expected ',' or ']' in array");
+
+// ============================================
+// Parser: Object
+// ============================================
+
+func _parse_object(pos, s) = _parse_object_start(_skip_whitespace(s, pos + 1), s);
+
+func _parse_object_start(pos, s) = _parse_obj_bound(pos, s, pos >= len(s));
+func _parse_obj_bound(pos, s, at_end) = match at_end
+    true => failure("Unterminated object")
+    false => _parse_obj_check(pos, s, string.char_at(s, pos));
+func _parse_obj_check(pos, s, c) = match c
+    '}' => success({value: {}, next: pos + 1})
+    _ => _parse_object_pairs(pos, s, {});
+
+func _parse_object_pairs(pos, s, acc) = match string.char_at(s, pos)
+    '"' => _parse_object_key(pos, s, acc)
+    _ => failure("Expected string key in object");
+
+func _parse_object_key(pos, s, acc) = _parse_string(pos, s) !? {
+    success(key_result) => _parse_object_colon(_skip_whitespace(s, key_result.next), s, acc, key_result.value)
+    failure(e) => failure(e)
+};
+
+func _parse_object_colon(pos, s, acc, key) = match string.char_at(s, pos)
+    ':' => _parse_object_value(_skip_whitespace(s, pos + 1), s, acc, key)
+    _ => failure("Expected ':' after object key");
+
+func _parse_object_value(pos, s, acc, key) = _parse_value(pos, s) !? {
+    success(val_result) => _parse_object_after_pair(_skip_whitespace(s, val_result.next), s, hash_set(acc, key, val_result.value))
+    failure(e) => failure(e)
+};
+
+func _parse_object_after_pair(pos, s, acc) = _parse_obj_after_bound(pos, s, acc, pos >= len(s));
+func _parse_obj_after_bound(pos, s, acc, at_end) = match at_end
+    true => failure("Unterminated object")
+    false => _parse_obj_after_char(pos, s, acc, string.char_at(s, pos));
+func _parse_obj_after_char(pos, s, acc, c) = match c
+    '}' => success({value: acc, next: pos + 1})
+    ',' => _parse_object_pairs(_skip_whitespace(s, pos + 1), s, acc)
+    _ => failure("Expected ',' or '}' in object");
+
+// ============================================
+// Stringify Implementation
+// ============================================
+
+func _stringify_value(value) = match types.type_of(value)
+    'string' => _stringify_string(value)
+    'int' => to_string(value)
+    'float' => to_string(value)
+    'bool' => _stringify_bool(value)
+    'null' => 'null'
+    'array' => _stringify_array(value)
+    'hash' => _stringify_object(value)
+    _ => to_string(value);
+
+func _stringify_bool(b) = match b
+    true => 'true'
+    false => 'false';
+
+func _stringify_string(s) = concat('"', concat(_escape_string(s), '"'));
+
+func _escape_string(s) = s
+    |> string.replace('\\', '\\\\')
+    |> string.replace('"', '\\"')
+    |> string.replace('\n', '\\n')
+    |> string.replace('\r', '\\r')
+    |> string.replace('\t', '\\t');
+
+func _stringify_array(arr) = _stringify_arr_len(arr, len(arr));
+func _stringify_arr_len(arr, l) = match l
+    0 => '[]'
+    _ => concat('[', concat(_stringify_array_elements(arr), ']'));
+
+func _stringify_array_elements(arr) = arr
+    |> map(v => _stringify_value(v))
+    |> string.join(',');
+
+func _stringify_object(obj) = _stringify_obj_len(obj, len(keys(obj)));
+func _stringify_obj_len(obj, l) = match l
+    0 => '{}'
+    _ => concat('{', concat(_stringify_object_pairs(obj), '}'));
+
+func _stringify_object_pairs(obj) = keys(obj)
+    |> map(k => concat(_stringify_string(k), concat(':', _stringify_value(obj[k]))))
+    |> string.join(',');

@@ -1,0 +1,6 @@
+name = "json"
+author = "YTNOBODY"
+description = "json parser / builder"
+license = "MIT"
+keywords = ["json", "data"]
+entry = "mod.ca"

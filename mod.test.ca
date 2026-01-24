@@ -1,0 +1,242 @@
+// JSON Module Test Suite
+use core.io!;
+use core.assert!;
+use json;
+
+io.println("JSON Module Test Suite");
+io.println("======================");
+
+// === Parse: Basic Types ===
+assert.section("parse: Numbers");
+json.parse("42") !? {
+    success(v) => assert.eq("integer", v, 42)
+    failure(e) => assert.fail("failed to parse 42")
+};
+json.parse("-17") !? {
+    success(v) => assert.eq("negative integer", v, -17)
+    failure(e) => assert.fail("failed to parse -17")
+};
+json.parse("3.14") !? {
+    success(v) => assert.eq("float", v, 3.14)
+    failure(e) => assert.fail("failed to parse 3.14")
+};
+json.parse("0") !? {
+    success(v) => assert.eq("zero", v, 0)
+    failure(e) => assert.fail("failed to parse 0")
+};
+json.parse("-0.5") !? {
+    success(v) => assert.eq("negative float", v, -0.5)
+    failure(e) => assert.fail("failed to parse -0.5")
+};
+json.parse("1000000") !? {
+    success(v) => assert.eq("large number", v, 1000000)
+    failure(e) => assert.fail("failed to parse large number")
+};
+
+assert.section("parse: Booleans and Null");
+json.parse("true") !? {
+    success(v) => assert.is_true("true literal", v)
+    failure(e) => assert.fail("failed to parse true")
+};
+json.parse("false") !? {
+    success(v) => assert.is_false("false literal", v)
+    failure(e) => assert.fail("failed to parse false")
+};
+json.parse("null") !? {
+    success(v) => assert.is_null("null literal", v)
+    failure(e) => assert.fail("failed to parse null")
+};
+
+assert.section("parse: Strings");
+json.parse('"hello"') !? {
+    success(v) => assert.eq("simple string", v, "hello")
+    failure(e) => assert.fail("failed to parse string")
+};
+json.parse('""') !? {
+    success(v) => assert.eq("empty string", v, "")
+    failure(e) => assert.fail("failed to parse empty string")
+};
+json.parse('"hello world"') !? {
+    success(v) => assert.eq("string with space", v, "hello world")
+    failure(e) => assert.fail("failed to parse string with space")
+};
+
+// === Parse: Arrays ===
+assert.section("parse: Arrays");
+json.parse("[]") !? {
+    success(v) => assert.len_eq("empty array", v, 0)
+    failure(e) => assert.fail("failed to parse empty array")
+};
+json.parse("[1, 2, 3]") !? {
+    success(v) => assert.eq("array first element", v[0], 1)
+    failure(e) => assert.fail("failed to parse array")
+};
+json.parse("[1, 2, 3]") !? {
+    success(v) => assert.eq("array last element", v[2], 3)
+    failure(e) => assert.fail("failed to parse array")
+};
+json.parse('[true, false, null, 42, "text"]') !? {
+    success(v) => assert.len_eq("mixed type array", v, 5)
+    failure(e) => assert.fail("failed to parse mixed array")
+};
+json.parse("[[1, 2], [3, 4], [5, 6]]") !? {
+    success(v) => assert.eq("nested array access", v[1][0], 3)
+    failure(e) => assert.fail("failed to parse nested array")
+};
+
+// === Parse: Objects ===
+assert.section("parse: Objects");
+json.parse('{}') !? {
+    success(v) => assert.is_type("empty object", v, "hash")
+    failure(e) => assert.fail("failed to parse empty object")
+};
+json.parse('{"name": "Alice", "age": 30}') !? {
+    success(v) => assert.eq("object string value", v["name"], "Alice")
+    failure(e) => assert.fail("failed to parse object")
+};
+json.parse('{"name": "Alice", "age": 30}') !? {
+    success(v) => assert.eq("object number value", v["age"], 30)
+    failure(e) => assert.fail("failed to parse object")
+};
+json.parse('{"active": true, "count": null}') !? {
+    success(v) => assert.is_true("object bool value", v["active"])
+    failure(e) => assert.fail("failed to parse object with bool")
+};
+
+// === Parse: Complex Nested Structures ===
+assert.section("parse: Nested structures");
+
+// Object containing array
+json.parse('{"numbers": [1, 2, 3], "name": "test"}') !? {
+    success(v) => assert.len_eq("object with array", v["numbers"], 3)
+    failure(e) => assert.fail("failed to parse object with array")
+};
+
+// Array of objects
+json.parse('[{"id": 1}, {"id": 2}, {"id": 3}]') !? {
+    success(v) => assert.eq("array of objects", v[1]["id"], 2)
+    failure(e) => assert.fail("failed to parse array of objects")
+};
+
+// Deeply nested object
+deep_obj = """
+{
+    "level1": {
+        "level2": {
+            "level3": {
+                "value": 42
+            }
+        }
+    }
+}
+""";
+json.parse(deep_obj) !? {
+    success(v) => assert.eq("deep nesting", v["level1"]["level2"]["level3"]["value"], 42)
+    failure(e) => assert.fail("failed to parse deep object")
+};
+
+// Mixed nested structure
+mixed = """
+{
+    "users": [
+        {"name": "Alice", "scores": [95, 87, 92]},
+        {"name": "Bob", "scores": [88, 91, 85]}
+    ]
+}
+""";
+json.parse(mixed) !? {
+    success(v) => assert.eq("mixed nested - user name", v["users"][0]["name"], "Alice")
+    failure(e) => assert.fail("failed to parse mixed nested")
+};
+json.parse(mixed) !? {
+    success(v) => assert.eq("mixed nested - score", v["users"][0]["scores"][1], 87)
+    failure(e) => assert.fail("failed to parse mixed nested scores")
+};
+json.parse(mixed) !? {
+    success(v) => assert.len_eq("mixed nested - users count", v["users"], 2)
+    failure(e) => assert.fail("failed to parse mixed nested users")
+};
+
+// === Parse: Whitespace Handling ===
+assert.section("parse: Whitespace");
+json.parse('  42  ') !? {
+    success(v) => assert.eq("number with spaces", v, 42)
+    failure(e) => assert.fail("failed to parse with spaces")
+};
+json.parse('{ "a" : 1 , "b" : 2 }') !? {
+    success(v) => assert.eq("object with spaces", v["a"], 1)
+    failure(e) => assert.fail("failed to parse object with spaces")
+};
+formatted_array = """
+[
+    1,
+    2,
+    3
+]
+""";
+json.parse(formatted_array) !? {
+    success(v) => assert.len_eq("array with newlines", v, 3)
+    failure(e) => assert.fail("failed to parse with newlines")
+};
+
+// === Stringify Tests ===
+assert.section("stringify: Primitives");
+assert.eq("stringify int", json.stringify(42), "42");
+assert.eq("stringify negative", json.stringify(-17), "-17");
+assert.eq("stringify float", json.stringify(3.14), "3.14");
+assert.eq("stringify true", json.stringify(true), "true");
+assert.eq("stringify false", json.stringify(false), "false");
+
+assert.section("stringify: Arrays");
+assert.eq("stringify empty array", json.stringify([]), '[]');
+assert.eq("stringify int array", json.stringify([1, 2, 3]), '[1,2,3]');
+assert.eq("stringify nested array", json.stringify([[1, 2], [3, 4]]), '[[1,2],[3,4]]');
+assert.eq("stringify mixed array", json.stringify([1, true, "hello"]), '[1,true,"hello"]');
+
+assert.section("stringify: Objects");
+assert.eq("stringify empty object", json.stringify({}), '{}');
+
+// === Round-trip Tests ===
+assert.section("Round-trip");
+
+// Simple values
+json.parse(json.stringify(42)) !? {
+    success(v) => assert.eq("round-trip integer", v, 42)
+    failure(e) => assert.fail("round-trip integer failed")
+};
+json.parse(json.stringify(true)) !? {
+    success(v) => assert.is_true("round-trip bool", v)
+    failure(e) => assert.fail("round-trip bool failed")
+};
+json.parse(json.stringify([1, 2, 3])) !? {
+    success(v) => assert.eq("round-trip array", v[1], 2)
+    failure(e) => assert.fail("round-trip array failed")
+};
+
+// Complex structure round-trip
+original = [
+    {name: "Alice", age: 30, active: true},
+    {name: "Bob", age: 25, active: false}
+];
+json.parse(json.stringify(original)) !? {
+    success(v) => assert.eq("round-trip complex - name", v[0]["name"], "Alice")
+    failure(e) => assert.fail("round-trip complex failed")
+};
+json.parse(json.stringify(original)) !? {
+    success(v) => assert.eq("round-trip complex - age", v[1]["age"], 25)
+    failure(e) => assert.fail("round-trip complex age failed")
+};
+
+// === Error Cases ===
+assert.section("parse: Error cases");
+assert.throws("empty input", json.parse(''));
+assert.throws("unclosed brace", json.parse('{'));
+assert.throws("unclosed bracket", json.parse('['));
+assert.throws("trailing comma in array", json.parse('[1, 2,]'));
+assert.throws("trailing comma in object", json.parse('{"a": 1,}'));
+assert.throws("invalid token", json.parse('invalid'));
+assert.throws("missing colon", json.parse('{"a" 1}'));
+assert.throws("missing value", json.parse('{"a":}'));
+
+io.println("\n======================");
+io.println("JSON test suite complete!");
