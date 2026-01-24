@@ -1,5 +1,5 @@
 name = "json"
-author = "YTNOBODY"
+author = "ytnobody"
 description = "json parser / builder"
 license = "MIT"
 keywords = ["json", "data"]
