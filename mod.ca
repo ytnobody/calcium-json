@@ -65,17 +65,82 @@ func _parse_value_digit(c, pos, s, is_digit) = match is_digit
 // Parser: String
 // ============================================
 
-func _parse_string(pos, s) = _parse_string_content(pos + 1, pos + 1, s);
+func _parse_string(pos, s) = _parse_string_build(pos + 1, "", s);
 
-func _parse_string_content(start, pos, s) = _parse_str_bound(start, pos, s, pos >= len(s));
-func _parse_str_bound(start, pos, s, at_end) = match at_end
+func _parse_string_build(pos, acc, s) = _parse_strb_bound(pos, acc, s, pos >= len(s));
+func _parse_strb_bound(pos, acc, s, at_end) = match at_end
     true => failure("Unterminated string")
-    false => _parse_string_char(start, pos, s, string.char_at(s, pos));
+    false => _parse_string_dispatch(pos, acc, s, string.char_at(s, pos));
 
-func _parse_string_char(start, pos, s, c) = match c
-    '"' => success({value: string.substring(s, start, pos), next: pos + 1})
-    '\\' => _parse_string_content(start, pos + 2, s)
-    _ => _parse_string_content(start, pos + 1, s);
+func _parse_string_dispatch(pos, acc, s, c) = match c
+    '"' => success({value: acc, next: pos + 1})
+    '\\' => _parse_escape(pos, acc, s)
+    _ => _parse_string_build(pos + 1, concat(acc, c), s);
+
+// ============================================
+// Parser: Escape sequences
+// ============================================
+
+func _parse_escape(pos, acc, s) = _parse_escape_at(pos, acc, s, string.char_at(s, pos + 1));
+func _parse_escape_at(pos, acc, s, e) = match e
+    '"' => _parse_string_build(pos + 2, concat(acc, '\"'), s)
+    '\\' => _parse_string_build(pos + 2, concat(acc, '\\'), s)
+    '/' => _parse_string_build(pos + 2, concat(acc, '/'), s)
+    'b' => _parse_string_build(pos + 2, concat(acc, _ctrl_char(0x08)), s)
+    'f' => _parse_string_build(pos + 2, concat(acc, _ctrl_char(0x0C)), s)
+    'n' => _parse_string_build(pos + 2, concat(acc, '\n'), s)
+    'r' => _parse_string_build(pos + 2, concat(acc, '\r'), s)
+    't' => _parse_string_build(pos + 2, concat(acc, '\t'), s)
+    'u' => _parse_unicode(pos, acc, s)
+    _ => failure("Invalid escape sequence");
+
+func _ctrl_char(cp) = string.from_code(cp) !? {
+    success(c) => c
+    failure(_) => '?'
+};
+
+// ============================================
+// Parser: Unicode escapes (\uXXXX and \uXXXX\uXXXX pairs)
+// ============================================
+
+func _parse_unicode(pos, acc, s) =
+    _parse_unicode_digits(pos + 2, acc, s, 0, 0,
+        (p, a, st, cp) => _parse_unicode_scalar(p, a, st, cp, cp >= 0xD800 && cp <= 0xDBFF));
+
+func _parse_unicode_scalar(pos, acc, s, cp, is_high) = match is_high
+    true => _parse_unicode_low_peek(pos, acc, s, cp, string.char_at(s, pos) == '\\' && string.char_at(s, pos + 1) == 'u')
+    false => _parse_unicode_emit(pos, acc, s, cp, cp >= 0xDC00 && cp <= 0xDFFF);
+
+func _parse_unicode_low_peek(pos, acc, s, hi, is_uw) = match is_uw
+    false => failure("Invalid unicode surrogate pair")
+    true => _parse_unicode_digits(pos + 2, acc, s, 0, 0,
+        (p, a, st, lo) => _parse_unicode_combine(p, a, st, hi, lo, lo >= 0xDC00 && lo <= 0xDFFF));
+
+func _parse_unicode_combine(pos, acc, s, hi, lo, is_low) = match is_low
+    false => failure("Invalid low surrogate in unicode escape")
+    true => _parse_unicode_emit(pos, acc, s, 0x10000 + ((hi - 0xD800) * 0x400) + (lo - 0xDC00), false);
+
+func _parse_unicode_emit(pos, acc, s, cp, is_low) = match is_low
+    true => failure("Lone surrogate in unicode escape")
+    false => string.from_code(cp) !? {
+        success(c) => _parse_string_build(pos, concat(acc, c), s)
+        failure(e) => failure("Invalid unicode escape")
+    };
+
+func _parse_unicode_digits(pos, acc, s, n, cp, done) = match n
+    4 => done(pos, acc, s, cp)
+    _ => _parse_unicode_digit_ch(pos, acc, s, n, cp, done, string.char_at(s, pos));
+
+func _parse_unicode_digit_ch(pos, acc, s, n, cp, done, c) =
+    match _hex_val(c) v if v >= 0 => _parse_unicode_digits(pos + 1, acc, s, n + 1, cp * 16 + v, done)
+                          _ => failure("Invalid unicode escape");
+
+func _hex_val(c) = match string.index_of("0123456789abcdef", c)
+    x if x >= 0 => x
+    _ => match string.index_of("ABCDEF", c)
+        y if y >= 0 => y + 10
+        _ => -1;
+
 
 // ============================================
 // Parser: Number

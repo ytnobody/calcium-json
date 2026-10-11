@@ -1,10 +1,28 @@
 // JSON Module Test Suite
 use core.io!;
 use core.assert!;
+use core.string;
 use json;
 
 io.println("JSON Module Test Suite");
 io.println("======================");
+
+// helper: unwrap a success/failure result to a plain value
+func _ok(r) = r !? {
+    success(v) => v
+    failure(_) => "__PARSE_ERROR__"
+};
+
+// control characters not representable as literal escapes
+bs = string.from_code(0x08) !? {
+    success(c) => c
+    failure(_) => "?"
+};
+ff = string.from_code(0x0C) !? {
+    success(c) => c
+    failure(_) => "?"
+};
+
 
 // === Parse: Basic Types ===
 assert.section("parse: Numbers");
@@ -60,6 +78,25 @@ json.parse('"hello world"') !? {
     success(v) => assert.eq("string with space", v, "hello world")
     failure(e) => assert.fail("failed to parse string with space")
 };
+
+assert.section("parse: Escape sequences");
+assert.eq("escape quote", _ok(json.parse('"say \\"hi\\""')), "say \"hi\"");
+assert.eq("escape backslash", _ok(json.parse('"a\\\\b"')), "a\\b");
+assert.eq("escape slash", _ok(json.parse('"a\\/b"')), "a/b");
+assert.eq("escape newline/tab", _ok(json.parse('"line\\ntab\\t"')), "line\ntab\t");
+assert.eq("escape CR", _ok(json.parse('"a\\rb"')), "a\rb");
+assert.eq("escape backspace", _ok(json.parse('"a\\bb"')), concat("a", concat(bs, "b")));
+assert.eq("escape formfeed", _ok(json.parse('"a\\fb"')), concat("a", concat(ff, "b")));
+
+assert.section("parse: Unicode escapes");
+assert.eq("unicode ascii", _ok(json.parse('"\\u0041"')), "A");
+assert.eq("unicode digit hex", _ok(json.parse('"\\u0030"')), "0");
+assert.eq("unicode katakana", _ok(json.parse('"\\u30A2"')), "ア");
+assert.eq("unicode mixed text", _ok(json.parse('"h\\u0069"')), "hi");
+assert.eq("unicode surrogate pair", _ok(json.parse('"\\uD83D\\uDE00"')), "😀");
+assert.eq("unicode control newline", _ok(json.parse('"\\u000A"')), "\n");
+assert.throws("invalid unicode hex", json.parse('"\\u12Z4"'));
+assert.throws("invalid escape", json.parse('"\\q"'));
 
 // === Parse: Arrays ===
 assert.section("parse: Arrays");
@@ -238,5 +275,6 @@ assert.throws("invalid token", json.parse('invalid'));
 assert.throws("missing colon", json.parse('{"a" 1}'));
 assert.throws("missing value", json.parse('{"a":}'));
 
+io.println("\n======================");
 io.println("\n======================");
 io.println("JSON test suite complete!");
