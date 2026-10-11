@@ -146,8 +146,9 @@ This module uses the following core (stdlib) modules:
 
 # LIMITATIONS
 
-- Escape sequences in strings are passed through but not fully decoded
-  (e.g., `\u0041` is not converted to `A`)
+- Escape sequences in strings are fully decoded, including standard escapes
+  (`\"`, `\\`, `\/`, `\b`, `\f`, `\n`, `\r`, `\t`) and Unicode escapes
+  (`\uXXXX`, including `\uXXXX\uXXXX` surrogate pairs)
 - Very deeply nested structures may hit recursion limits
 
 # SEE ALSO
