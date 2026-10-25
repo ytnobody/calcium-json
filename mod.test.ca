@@ -223,6 +223,8 @@ assert.eq("stringify negative", json.stringify(-17), "-17");
 assert.eq("stringify float", json.stringify(3.14), "3.14");
 assert.eq("stringify true", json.stringify(true), "true");
 assert.eq("stringify false", json.stringify(false), "false");
+assert.eq("stringify None", json.stringify(Maybe.None), "null");
+assert.eq("stringify Some", json.stringify(Maybe.Some(42)), "42");
 
 assert.section("stringify: Arrays");
 assert.eq("stringify empty array", json.stringify([]), '[]');
