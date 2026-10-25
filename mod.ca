@@ -26,6 +26,13 @@ func parse(s) = _parse_value(_skip_whitespace(s, 0), s) !? {
 
 func stringify(value) = _stringify_value(value);
 
+// _char_at unwraps string.char_at for internal parser use. Positions used by
+// the parser are bounds-checked before this helper is called; out-of-range
+// positions are treated as an empty string.
+func _char_at(s, pos) = match string.char_at(s, pos)
+    Maybe.Some(c) => c
+    Maybe.None => "";
+
 // ============================================
 // Parser: Whitespace
 // ============================================
@@ -33,7 +40,7 @@ func stringify(value) = _stringify_value(value);
 func _skip_whitespace(s, pos) = _skip_ws_bound(s, pos, pos >= len(s));
 func _skip_ws_bound(s, pos, at_end) = match at_end
     true => pos
-    false => _skip_ws_char(s, pos, Whitespace(string.char_at(s, pos)));
+    false => _skip_ws_char(s, pos, Whitespace(_char_at(s, pos)));
 func _skip_ws_char(s, pos, is_ws) = match is_ws
     true => _skip_whitespace(s, pos + 1)
     false => pos;
@@ -45,7 +52,7 @@ func _skip_ws_char(s, pos, is_ws) = match is_ws
 func _parse_value(pos, s) = _parse_value_bound(pos, s, pos >= len(s));
 func _parse_value_bound(pos, s, at_end) = match at_end
     true => failure("Unexpected end of input")
-    false => _parse_value_at(string.char_at(s, pos), pos, s);
+    false => _parse_value_at(_char_at(s, pos), pos, s);
 
 func _parse_value_at(c, pos, s) = match c
     '"' => _parse_string(pos, s)
@@ -70,7 +77,7 @@ func _parse_string(pos, s) = _parse_string_build(pos + 1, "", s);
 func _parse_string_build(pos, acc, s) = _parse_strb_bound(pos, acc, s, pos >= len(s));
 func _parse_strb_bound(pos, acc, s, at_end) = match at_end
     true => failure("Unterminated string")
-    false => _parse_string_dispatch(pos, acc, s, string.char_at(s, pos));
+    false => _parse_string_dispatch(pos, acc, s, _char_at(s, pos));
 
 func _parse_string_dispatch(pos, acc, s, c) = match c
     '"' => success({value: acc, next: pos + 1})
@@ -81,7 +88,7 @@ func _parse_string_dispatch(pos, acc, s, c) = match c
 // Parser: Escape sequences
 // ============================================
 
-func _parse_escape(pos, acc, s) = _parse_escape_at(pos, acc, s, string.char_at(s, pos + 1));
+func _parse_escape(pos, acc, s) = _parse_escape_at(pos, acc, s, _char_at(s, pos + 1));
 func _parse_escape_at(pos, acc, s, e) = match e
     '"' => _parse_string_build(pos + 2, concat(acc, '\"'), s)
     '\\' => _parse_string_build(pos + 2, concat(acc, '\\'), s)
@@ -108,7 +115,7 @@ func _parse_unicode(pos, acc, s) =
         (p, a, st, cp) => _parse_unicode_scalar(p, a, st, cp, cp >= 0xD800 && cp <= 0xDBFF));
 
 func _parse_unicode_scalar(pos, acc, s, cp, is_high) = match is_high
-    true => _parse_unicode_low_peek(pos, acc, s, cp, string.char_at(s, pos) == '\\' && string.char_at(s, pos + 1) == 'u')
+    true => _parse_unicode_low_peek(pos, acc, s, cp, _char_at(s, pos) == '\\' && _char_at(s, pos + 1) == 'u')
     false => _parse_unicode_emit(pos, acc, s, cp, cp >= 0xDC00 && cp <= 0xDFFF);
 
 func _parse_unicode_low_peek(pos, acc, s, hi, is_uw) = match is_uw
@@ -129,7 +136,7 @@ func _parse_unicode_emit(pos, acc, s, cp, is_low) = match is_low
 
 func _parse_unicode_digits(pos, acc, s, n, cp, done) = match n
     4 => done(pos, acc, s, cp)
-    _ => _parse_unicode_digit_ch(pos, acc, s, n, cp, done, string.char_at(s, pos));
+    _ => _parse_unicode_digit_ch(pos, acc, s, n, cp, done, _char_at(s, pos));
 
 func _parse_unicode_digit_ch(pos, acc, s, n, cp, done, c) =
     match _hex_val(c) v if v >= 0 => _parse_unicode_digits(pos + 1, acc, s, n + 1, cp * 16 + v, done)
@@ -151,7 +158,7 @@ func _parse_number(pos, s) = _parse_number_end(pos, pos, s);
 func _parse_number_end(start, pos, s) = _parse_num_bound(start, pos, s, pos >= len(s));
 func _parse_num_bound(start, pos, s, at_end) = match at_end
     true => _make_number(string.substring(s, start, pos), pos)
-    false => _parse_num_char(start, pos, s, NumberChar(string.char_at(s, pos)));
+    false => _parse_num_char(start, pos, s, NumberChar(_char_at(s, pos)));
 func _parse_num_char(start, pos, s, is_num) = match is_num
     true => _parse_number_end(start, pos + 1, s)
     false => _make_number(string.substring(s, start, pos), pos);
@@ -188,7 +195,7 @@ func _parse_false(pos, s) = match string.substring(s, pos, pos + 5)
     _ => failure("Expected 'false'");
 
 func _parse_null(pos, s) = match string.substring(s, pos, pos + 4)
-    'null' => success({value: types.null, next: pos + 4})
+    'null' => success({value: Maybe.None, next: pos + 4})
     _ => failure("Expected 'null'");
 
 // ============================================
@@ -200,7 +207,7 @@ func _parse_array(pos, s) = _parse_array_start(_skip_whitespace(s, pos + 1), s);
 func _parse_array_start(pos, s) = _parse_arr_bound(pos, s, pos >= len(s));
 func _parse_arr_bound(pos, s, at_end) = match at_end
     true => failure("Unterminated array")
-    false => _parse_arr_check(pos, s, string.char_at(s, pos));
+    false => _parse_arr_check(pos, s, _char_at(s, pos));
 func _parse_arr_check(pos, s, c) = match c
     ']' => success({value: [], next: pos + 1})
     _ => _parse_array_elements(pos, s, []);
@@ -213,7 +220,7 @@ func _parse_array_elements(pos, s, acc) = _parse_value(pos, s) !? {
 func _parse_array_after_element(pos, s, acc) = _parse_arr_after_bound(pos, s, acc, pos >= len(s));
 func _parse_arr_after_bound(pos, s, acc, at_end) = match at_end
     true => failure("Unterminated array")
-    false => _parse_arr_after_char(pos, s, acc, string.char_at(s, pos));
+    false => _parse_arr_after_char(pos, s, acc, _char_at(s, pos));
 func _parse_arr_after_char(pos, s, acc, c) = match c
     ']' => success({value: acc, next: pos + 1})
     ',' => _parse_array_elements(_skip_whitespace(s, pos + 1), s, acc)
@@ -228,12 +235,12 @@ func _parse_object(pos, s) = _parse_object_start(_skip_whitespace(s, pos + 1), s
 func _parse_object_start(pos, s) = _parse_obj_bound(pos, s, pos >= len(s));
 func _parse_obj_bound(pos, s, at_end) = match at_end
     true => failure("Unterminated object")
-    false => _parse_obj_check(pos, s, string.char_at(s, pos));
+    false => _parse_obj_check(pos, s, _char_at(s, pos));
 func _parse_obj_check(pos, s, c) = match c
     '}' => success({value: {}, next: pos + 1})
     _ => _parse_object_pairs(pos, s, {});
 
-func _parse_object_pairs(pos, s, acc) = match string.char_at(s, pos)
+func _parse_object_pairs(pos, s, acc) = match _char_at(s, pos)
     '"' => _parse_object_key(pos, s, acc)
     _ => failure("Expected string key in object");
 
@@ -242,7 +249,7 @@ func _parse_object_key(pos, s, acc) = _parse_string(pos, s) !? {
     failure(e) => failure(e)
 };
 
-func _parse_object_colon(pos, s, acc, key) = match string.char_at(s, pos)
+func _parse_object_colon(pos, s, acc, key) = match _char_at(s, pos)
     ':' => _parse_object_value(_skip_whitespace(s, pos + 1), s, acc, key)
     _ => failure("Expected ':' after object key");
 
@@ -254,7 +261,7 @@ func _parse_object_value(pos, s, acc, key) = _parse_value(pos, s) !? {
 func _parse_object_after_pair(pos, s, acc) = _parse_obj_after_bound(pos, s, acc, pos >= len(s));
 func _parse_obj_after_bound(pos, s, acc, at_end) = match at_end
     true => failure("Unterminated object")
-    false => _parse_obj_after_char(pos, s, acc, string.char_at(s, pos));
+    false => _parse_obj_after_char(pos, s, acc, _char_at(s, pos));
 func _parse_obj_after_char(pos, s, acc, c) = match c
     '}' => success({value: acc, next: pos + 1})
     ',' => _parse_object_pairs(_skip_whitespace(s, pos + 1), s, acc)
@@ -272,6 +279,12 @@ func _stringify_value(value) = match types.type_of(value)
     'null' => 'null'
     'array' => _stringify_array(value)
     'hash' => _stringify_object(value)
+    'adt' => _stringify_maybe(value)
+    _ => to_string(value);
+
+func _stringify_maybe(value) = match value
+    Maybe.None => 'null'
+    Maybe.Some(v) => _stringify_value(v)
     _ => to_string(value);
 
 func _stringify_bool(b) = match b

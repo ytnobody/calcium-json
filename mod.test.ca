@@ -61,7 +61,7 @@ json.parse("false") !? {
     failure(e) => assert.fail("failed to parse false")
 };
 json.parse("null") !? {
-    success(v) => assert.is_null("null literal", v)
+    success(v) => assert.eq("null literal", v, Maybe.None)
     failure(e) => assert.fail("failed to parse null")
 };
 
@@ -136,8 +136,8 @@ json.parse('{"name": "Alice", "age": 30}') !? {
     failure(e) => assert.fail("failed to parse object")
 };
 json.parse('{"active": true, "count": null}') !? {
-    success(v) => assert.is_true("object bool value", v["active"])
-    failure(e) => assert.fail("failed to parse object with bool")
+    success(v) => assert.eq("object null value", v["count"], Maybe.None)
+    failure(e) => assert.fail("failed to parse object with null")
 };
 
 // === Parse: Complex Nested Structures ===

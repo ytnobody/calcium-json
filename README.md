@@ -34,7 +34,7 @@ It supports the full JSON specification including:
 - Strings (with escape sequences)
 - Numbers (integers and floats, including scientific notation)
 - Booleans (`true`, `false`)
-- Null values
+- Null values (represented as `Maybe.None`)
 
 # FUNCTIONS
 
@@ -49,7 +49,7 @@ json.parse('"hello"');           // success("hello")
 json.parse('42');                // success(42)
 json.parse('3.14');              // success(3.14)
 json.parse('true');              // success(true)
-json.parse('null');              // success(null)
+json.parse('null');              // success(Maybe.None)
 ```
 
 Returns `success(value)` on successful parse, `failure(error_message)` on parse error.
@@ -64,7 +64,7 @@ json.stringify([1, 2, 3]);            // '[1,2,3]'
 json.stringify("hello");              // '"hello"'
 json.stringify(42);                   // '42'
 json.stringify(true);                 // 'true'
-json.stringify(null);                 // 'null'
+json.stringify(Maybe.None);           // 'null'
 ```
 
 Returns the JSON string representation of the value.
